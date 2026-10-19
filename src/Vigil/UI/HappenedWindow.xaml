@@ -1,0 +1,59 @@
+<Window x:Class="Vigil.UI.HappenedWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="clr-namespace:Vigil.UI"
+        Title="What happened · Vigil" Width="640" Height="780" MinWidth="480" MinHeight="420"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource WindowBg}" Foreground="{StaticResource Text1}"
+        UseLayoutRounding="True" TextOptions.TextFormattingMode="Ideal">
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="44" ResizeBorderThickness="6" GlassFrameThickness="0" CornerRadius="0" UseAeroCaptionButtons="False"/>
+    </WindowChrome.WindowChrome>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <!-- The sky outside right now, fading into the page. -->
+        <Border x:Name="SkyWash" Grid.RowSpan="3" Height="320" VerticalAlignment="Top" IsHitTestVisible="False"/>
+
+        <!-- Title bar -->
+        <Grid Height="44" Margin="18,0,8,0">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <ui:EyeView x:Name="Logo" Width="18" Height="18" Stroke="9"/>
+                <TextBlock Text="What happened" Style="{StaticResource BodyStrong}" Margin="9,0,0,0" VerticalAlignment="Center"/>
+            </StackPanel>
+            <StackPanel Tag="CaptionButtons" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                <Button Style="{StaticResource IconButton}" WindowChrome.IsHitTestVisibleInChrome="True" Click="OnMinimize" ToolTip="Minimize">
+                    <TextBlock Text="&#xE921;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="10" Foreground="{StaticResource Text2}"/>
+                </Button>
+                <Button Style="{StaticResource CloseButton}" WindowChrome.IsHitTestVisibleInChrome="True" Click="OnClose" ToolTip="Close">
+                    <TextBlock Text="&#xE8BB;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="10" Foreground="{StaticResource Text1}"/>
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <ScrollViewer x:Name="Scroller" Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel x:Name="Body" Margin="30,6,30,24"/>
+        </ScrollViewer>
+
+        <!-- Quiet footer -->
+        <Border Grid.Row="2" BorderBrush="{StaticResource Hairline}" BorderThickness="0,1,0,0" Padding="30,12">
+            <Grid>
+                <StackPanel Orientation="Horizontal">
+                    <Button Style="{StaticResource LinkButton}" Click="OnHow">
+                        <TextBlock Text="How Vigil works" Foreground="{StaticResource Text2}"/>
+                    </Button>
+                    <TextBlock Text="  ·  " Foreground="{StaticResource Text3}"/>
+                    <Button Style="{StaticResource LinkButton}" Click="OnSettings">
+                        <TextBlock Text="Settings" Foreground="{StaticResource Text2}"/>
+                    </Button>
+                </StackPanel>
+                <Button Style="{StaticResource LinkButton}" HorizontalAlignment="Right" Click="OnCopy">
+                    <TextBlock x:Name="CopyText" Text="Copy summary" Foreground="{StaticResource Blue}"/>
+                </Button>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

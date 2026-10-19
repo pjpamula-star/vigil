@@ -1,0 +1,136 @@
+<style>
+  .lg { font-family:"Segoe UI Variable Display","Segoe UI",system-ui,sans-serif; }
+  .lg-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:16px; }
+  .lg-card { background:#0d0f14; border-radius:18px; padding:26px 18px 18px; text-align:center; color:#fff; }
+  .lg-card .icon { width:128px; height:128px; margin:0 auto; filter:drop-shadow(0 14px 28px rgba(0,0,0,.55)); }
+  .lg-word { font-size:30px; font-weight:600; letter-spacing:-.02em; margin-top:16px; display:flex; align-items:center; justify-content:center; gap:10px; }
+  .lg-word svg { width:34px; height:34px; }
+  .lg-sizes { display:flex; justify-content:center; align-items:end; gap:16px; margin-top:16px; padding:10px; background:#1b1b1b; border-radius:10px; }
+  .lg-sizes svg { display:block; }
+  .lg-sizes span { font-size:10px; color:#777; display:block; margin-top:4px; }
+  .lg-light { display:flex; justify-content:center; gap:14px; margin-top:10px; padding:10px; background:#f3f3f3; border-radius:10px; }
+  .lg-name { font-size:13px; color:#9aa0aa; margin-top:12px; line-height:1.45; }
+  .lg-name b { color:#fff; font-size:15px; display:block; margin-bottom:2px; }
+</style>
+
+<div class="lg">
+<h2>Vigil logo: four directions</h2>
+<p class="subtitle">"Vigil" means keeping watch through the night. Each mark has to work as an app icon, in your taskbar at 16 pixels, and in one color. Click your favorite, or tell me which pieces to mix.</p>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <!-- shared almond eye -->
+    <path id="almond" d="M8 50 C24 27 38 21 50 21 C62 21 76 27 92 50 C76 73 62 79 50 79 C38 79 24 73 8 50Z"/>
+    <linearGradient id="bgA" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#15324a"/><stop offset="1" stop-color="#050b14"/></linearGradient>
+    <linearGradient id="bgB" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2b1f5c"/><stop offset="1" stop-color="#08061a"/></linearGradient>
+    <linearGradient id="bgC" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#241509"/><stop offset="1" stop-color="#050302"/></linearGradient>
+    <linearGradient id="bgD" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1c1c1e"/><stop offset="1" stop-color="#000"/></linearGradient>
+    <linearGradient id="cy" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9ff0ff"/><stop offset="1" stop-color="#2e9bff"/></linearGradient>
+    <linearGradient id="vi" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#e6dcff"/><stop offset="1" stop-color="#9a7bff"/></linearGradient>
+    <linearGradient id="am" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe7a3"/><stop offset=".55" stop-color="#ffa53a"/><stop offset="1" stop-color="#ff5a1f"/></linearGradient>
+    <linearGradient id="gr" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#d7ffe9"/><stop offset="1" stop-color="#34d399"/></linearGradient>
+    <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".16"/><stop offset=".45" stop-color="#fff" stop-opacity="0"/></linearGradient>
+    <radialGradient id="glowA"><stop offset="0" stop-color="#4cc9ff" stop-opacity=".55"/><stop offset="1" stop-color="#4cc9ff" stop-opacity="0"/></radialGradient>
+    <radialGradient id="glowB"><stop offset="0" stop-color="#a68bff" stop-opacity=".5"/><stop offset="1" stop-color="#a68bff" stop-opacity="0"/></radialGradient>
+    <radialGradient id="glowC"><stop offset="0" stop-color="#ff9a3a" stop-opacity=".55"/><stop offset="1" stop-color="#ff9a3a" stop-opacity="0"/></radialGradient>
+    <!-- glyphs (100x100 space) -->
+    <g id="gA">
+      <use href="#almond" fill="none" stroke="currentColor" stroke-width="7" stroke-linejoin="round"/>
+      <circle cx="50" cy="50" r="15" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-dasharray="74 20.2" transform="rotate(-62 50 50)"/>
+      <circle cx="50" cy="50" r="5.5" fill="currentColor"/>
+    </g>
+    <mask id="moonCut"><rect width="100" height="100" fill="#fff"/><circle cx="57" cy="45" r="13" fill="#000"/></mask>
+    <g id="gB">
+      <use href="#almond" fill="none" stroke="currentColor" stroke-width="7" stroke-linejoin="round"/>
+      <circle cx="50" cy="50" r="17" fill="currentColor" mask="url(#moonCut)"/>
+    </g>
+    <mask id="flameEye"><rect width="100" height="100" fill="#fff"/>
+      <path d="M30 64 C38 54 44 51 50 51 C56 51 62 54 70 64 C62 74 56 77 50 77 C44 77 38 74 30 64Z" fill="#000"/>
+      <circle cx="50" cy="64" r="6" fill="#fff"/></mask>
+    <g id="gC">
+      <path d="M50 6 C56 22 74 34 76 58 C78 78 65 92 50 92 C35 92 22 78 24 58 C26 40 40 30 44 16 C47 24 49 26 50 6Z" mask="url(#flameEye)"/>
+    </g>
+    <g id="gD">
+      <use href="#almond" fill="none" stroke="currentColor" stroke-width="7" stroke-linejoin="round"/>
+      <path d="M41 39 L54 50 L41 61" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M58 61 H66" stroke="currentColor" stroke-width="7" stroke-linecap="round"/>
+    </g>
+  </defs>
+</svg>
+
+<div class="options lg-grid" style="display:grid">
+
+  <!-- A -->
+  <div class="option lg-card" data-choice="logo-ring-eye" onclick="toggleSelect(this)" style="display:block">
+    <svg class="icon" viewBox="0 0 128 128">
+      <rect width="128" height="128" rx="29" fill="url(#bgA)"/>
+      <circle cx="64" cy="64" r="44" fill="url(#glowA)"/>
+      <g transform="translate(19 19) scale(.9)" style="color:#8fe6ff"><use href="#gA"/></g>
+      <rect width="128" height="128" rx="29" fill="url(#gloss)"/>
+    </svg>
+    <div class="lg-word"><svg viewBox="0 0 100 100" style="color:#7fdcff"><use href="#gA"/></svg>vigil</div>
+    <div class="lg-sizes">
+      <div><svg width="16" height="16" viewBox="0 0 100 100" style="color:#7fdcff"><use href="#gA"/></svg><span>16px</span></div>
+      <div><svg width="24" height="24" viewBox="0 0 100 100" style="color:#7fdcff"><use href="#gA"/></svg><span>24px</span></div>
+      <div><svg width="16" height="16" viewBox="0 0 100 100" style="color:#666"><use href="#gA"/></svg><span>idle</span></div>
+    </div>
+    <div class="lg-light"><svg width="28" height="28" viewBox="0 0 100 100" style="color:#111"><use href="#gA"/></svg></div>
+    <div class="lg-name"><b>A · Watching eye</b>The iris is a ring with a gap, the same ring you hold to stop. It's calm and technical, in the CBS-eye tradition of one symmetric shape that reads at any size.</div>
+  </div>
+
+  <!-- B -->
+  <div class="option lg-card" data-choice="logo-moon-eye" onclick="toggleSelect(this)" style="display:block">
+    <svg class="icon" viewBox="0 0 128 128">
+      <rect width="128" height="128" rx="29" fill="url(#bgB)"/>
+      <circle cx="64" cy="64" r="46" fill="url(#glowB)"/>
+      <g transform="translate(19 19) scale(.9)"><use href="#gB" style="color:#ddd2ff"/></g>
+      <circle cx="98" cy="28" r="1.6" fill="#fff" opacity=".8"/><circle cx="26" cy="34" r="1.1" fill="#fff" opacity=".6"/><circle cx="104" cy="98" r="1.2" fill="#fff" opacity=".5"/>
+      <rect width="128" height="128" rx="29" fill="url(#gloss)"/>
+    </svg>
+    <div class="lg-word"><svg viewBox="0 0 100 100" style="color:#c4b2ff"><use href="#gB"/></svg>vigil</div>
+    <div class="lg-sizes">
+      <div><svg width="16" height="16" viewBox="0 0 100 100" style="color:#c4b2ff"><use href="#gB"/></svg><span>16px</span></div>
+      <div><svg width="24" height="24" viewBox="0 0 100 100" style="color:#c4b2ff"><use href="#gB"/></svg><span>24px</span></div>
+      <div><svg width="16" height="16" viewBox="0 0 100 100" style="color:#666"><use href="#gB"/></svg><span>idle</span></div>
+    </div>
+    <div class="lg-light"><svg width="28" height="28" viewBox="0 0 100 100" style="color:#111"><use href="#gB"/></svg></div>
+    <div class="lg-name"><b>B · Night watch</b>The pupil is a crescent moon: awake while everyone else sleeps. It's the most "overnight" of the four and has a friendly personality.</div>
+  </div>
+
+  <!-- C -->
+  <div class="option lg-card" data-choice="logo-flame" onclick="toggleSelect(this)" style="display:block">
+    <svg class="icon" viewBox="0 0 128 128">
+      <rect width="128" height="128" rx="29" fill="url(#bgC)"/>
+      <circle cx="64" cy="72" r="48" fill="url(#glowC)"/>
+      <g transform="translate(19 17) scale(.9)"><use href="#gC" fill="url(#am)"/></g>
+      <rect width="128" height="128" rx="29" fill="url(#gloss)"/>
+    </svg>
+    <div class="lg-word"><svg viewBox="0 0 100 100" style="color:#ffae4a" fill="#ffae4a"><use href="#gC"/></svg>vigil</div>
+    <div class="lg-sizes">
+      <div><svg width="16" height="16" viewBox="0 0 100 100" fill="#ffae4a"><use href="#gC"/></svg><span>16px</span></div>
+      <div><svg width="24" height="24" viewBox="0 0 100 100" fill="#ffae4a"><use href="#gC"/></svg><span>24px</span></div>
+      <div><svg width="16" height="16" viewBox="0 0 100 100" fill="#666"><use href="#gC"/></svg><span>idle</span></div>
+    </div>
+    <div class="lg-light"><svg width="28" height="28" viewBox="0 0 100 100" fill="#111"><use href="#gC"/></svg></div>
+    <div class="lg-name"><b>C · Candle</b>The name taken literally: a vigil candle with an eye in the flame. It's warm, memorable and very distinct from other dev tools, and an "unlit" flame makes a nice idle state.</div>
+  </div>
+
+  <!-- D -->
+  <div class="option lg-card" data-choice="logo-caret-eye" onclick="toggleSelect(this)" style="display:block">
+    <svg class="icon" viewBox="0 0 128 128">
+      <rect width="128" height="128" rx="29" fill="url(#bgD)"/>
+      <g transform="translate(19 19) scale(.9)"><use href="#gD" style="color:#8ef5c4"/></g>
+      <rect width="128" height="128" rx="29" fill="url(#gloss)"/>
+    </svg>
+    <div class="lg-word"><svg viewBox="0 0 100 100" style="color:#5fe3a6"><use href="#gD"/></svg>vigil</div>
+    <div class="lg-sizes">
+      <div><svg width="16" height="16" viewBox="0 0 100 100" style="color:#5fe3a6"><use href="#gD"/></svg><span>16px</span></div>
+      <div><svg width="24" height="24" viewBox="0 0 100 100" style="color:#5fe3a6"><use href="#gD"/></svg><span>24px</span></div>
+      <div><svg width="16" height="16" viewBox="0 0 100 100" style="color:#666"><use href="#gD"/></svg><span>idle</span></div>
+    </div>
+    <div class="lg-light"><svg width="28" height="28" viewBox="0 0 100 100" style="color:#111"><use href="#gD"/></svg></div>
+    <div class="lg-name"><b>D · Terminal eye</b>The pupil is a terminal prompt <code>&gt;_</code>, which says "watching your code". It's the most obviously a developer tool, and feels a bit more generic.</div>
+  </div>
+</div>
+<p class="subtitle" style="margin-top:14px">Inspiration: the CBS eye (one symmetric shape, still iconic after 70 years), Apple app icons (a single bold glyph on a deep gradient with a soft top highlight), and Linear/Raycast (a monoline mark that holds up at 16px). Colors can be swapped between directions.</p>
+</div>

@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Vigil/Vigil.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Vigil.Tests/Vigil.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,6 @@
+# Only the phone app goes to Vercel.
+/*
+!/phone
+/phone/node_modules
+/phone/.vercel
+/phone/.env*

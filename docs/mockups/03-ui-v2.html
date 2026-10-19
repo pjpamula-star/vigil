@@ -1,0 +1,220 @@
+<style>
+  .v { --bg:#0b0b0d; --glass:rgba(38,38,42,.78); --glass2:rgba(255,255,255,.05); --hair:rgba(255,255,255,.08);
+       --t1:#f5f5f7; --t2:#a1a1a6; --t3:#6e6e73;
+       --blue:#4cc2ff; --orange:#ff9f0a; --green:#30d158; --red:#ff6961;
+       font-family:"Segoe UI Variable Display","Segoe UI Variable Text","Segoe UI",system-ui,sans-serif; color:var(--t1); -webkit-font-smoothing:antialiased; }
+  .v * { box-sizing:border-box; }
+  .scene { border-radius:22px; padding:44px 28px; display:flex; gap:32px; justify-content:center; align-items:flex-start; flex-wrap:wrap;
+           background: radial-gradient(1200px 500px at 15% 0%, #1a3350 0%, transparent 60%), radial-gradient(900px 500px at 100% 100%, #3a1d3f 0%, transparent 55%), #08080a; }
+  .glass { background:var(--glass); backdrop-filter:blur(40px) saturate(1.6); border:1px solid var(--hair); box-shadow:0 30px 80px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.06); }
+  .title-xl { font-size:28px; font-weight:600; letter-spacing:-.025em; line-height:1.15; }
+  .title-l  { font-size:20px; font-weight:600; letter-spacing:-.02em; }
+  .body     { font-size:14px; line-height:1.45; color:var(--t1); }
+  .cap1     { font-size:12px; color:var(--t2); }
+  .cap2     { font-size:11px; color:var(--t3); letter-spacing:.02em; }
+  .mono     { font-family:"Cascadia Code",Consolas,monospace; font-size:12px; }
+  .r { display:flex; align-items:center; }
+  .sb { justify-content:space-between; }
+  .g6{gap:6px}.g8{gap:8px}.g10{gap:10px}.g12{gap:12px}.g16{gap:16px}
+  .dot { width:8px; height:8px; border-radius:50%; flex:none; }
+  .live { animation:breathe 2.2s ease-in-out infinite; }
+  @keyframes breathe { 50% { opacity:.35; } }
+  .sep { height:1px; background:var(--hair); margin:0 -4px; }
+  .pill { display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:500; padding:3px 9px; border-radius:999px; background:var(--glass2); color:var(--t2); }
+  .pill.b{color:var(--blue);background:rgba(76,194,255,.12)} .pill.o{color:var(--orange);background:rgba(255,159,10,.13)} .pill.g{color:var(--green);background:rgba(48,209,88,.12)} .pill.rd{color:var(--red);background:rgba(255,105,97,.13)}
+  .btnp { background:var(--blue); color:#00131f; font-weight:600; font-size:13px; padding:8px 16px; border-radius:999px; display:inline-block; }
+  .btns { background:rgba(255,255,255,.09); color:var(--t1); font-weight:500; font-size:13px; padding:8px 16px; border-radius:999px; display:inline-block; }
+  .appicon { width:22px; height:22px; border-radius:6px; background:linear-gradient(#15324a,#050b14); display:grid; place-items:center; }
+  /* popover */
+  .pop { width:340px; border-radius:20px; padding:18px; }
+  .srow { display:flex; gap:12px; align-items:flex-start; padding:11px 4px; }
+  .srow + .srow { border-top:1px solid var(--hair); }
+  .glyph { width:30px; height:30px; border-radius:9px; display:grid; place-items:center; flex:none; font-size:14px; }
+  .seg { display:flex; background:rgba(255,255,255,.06); border-radius:10px; padding:3px; }
+  .seg div { flex:1; text-align:center; font-size:12px; font-weight:500; padding:6px 0; border-radius:8px; color:var(--t2); }
+  .seg .on { background:rgba(255,255,255,.14); color:var(--t1); box-shadow:0 1px 3px rgba(0,0,0,.3); }
+  .hold { position:relative; overflow:hidden; border-radius:12px; padding:11px; text-align:center; font-size:13px; font-weight:500; background:rgba(255,255,255,.06); color:var(--t2); }
+  .hold::before { content:""; position:absolute; inset:0; width:36%; background:rgba(255,105,97,.18); }
+  .hold span { position:relative; }
+  /* window */
+  .win { width:920px; max-width:100%; border-radius:16px; overflow:hidden; display:grid; grid-template-columns:250px 1fr; min-height:560px; }
+  .side { background:rgba(255,255,255,.03); border-right:1px solid var(--hair); padding:16px 10px; }
+  .side .item { padding:10px 10px; border-radius:10px; margin-bottom:2px; }
+  .side .item.sel { background:rgba(76,194,255,.14); }
+  .main { padding:26px 30px; }
+  .facts { display:flex; flex-wrap:wrap; gap:6px; margin-top:12px; }
+  .tl { margin-top:18px; border-left:1px solid var(--hair); padding-left:16px; }
+  .tl .e { position:relative; padding:6px 0; }
+  .tl .e::before { content:""; position:absolute; left:-20.5px; top:12px; width:8px; height:8px; border-radius:50%; background:var(--t3); }
+  .tl .e.b::before{background:var(--blue)} .tl .e.g::before{background:var(--green)} .tl .e.o::before{background:var(--orange)}
+  .ask { margin-top:18px; border-radius:14px; padding:14px 16px; background:rgba(255,159,10,.09); border:1px solid rgba(255,159,10,.25); }
+  .composer { margin-top:20px; display:flex; align-items:center; gap:10px; padding:10px 10px 10px 16px; border-radius:14px; background:rgba(255,255,255,.06); color:var(--t3); font-size:14px; }
+  .send { width:30px; height:30px; border-radius:50%; background:var(--blue); display:grid; place-items:center; color:#00131f; font-weight:700; }
+  /* welcome back */
+  .wb { width:560px; max-width:100%; border-radius:24px; padding:30px 30px 24px; }
+  .stats { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:20px; }
+  .stat { background:rgba(255,255,255,.05); border-radius:14px; padding:14px; }
+  .stat .n { font-size:30px; font-weight:600; letter-spacing:-.03em; line-height:1; }
+  .scard { margin-top:10px; border-radius:16px; padding:14px 16px; background:rgba(255,255,255,.05); }
+  .scard.need { background:rgba(255,159,10,.09); border:1px solid rgba(255,159,10,.25); }
+  .more { font-size:12px; color:var(--blue); margin-top:8px; }
+  .explain { max-width:900px; margin:14px auto 0; display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; }
+  .explain div { font-size:13px; color:var(--text-secondary); line-height:1.45; }
+  .explain b { color:var(--text-primary); display:block; margin-bottom:2px; }
+  .moments { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+  .moment { border-radius:16px; padding:16px; background:rgba(255,255,255,.04); border:1px solid var(--hair); }
+  .moment .k { font-size:11px; color:var(--t3); text-transform:uppercase; letter-spacing:.08em; }
+  .moment .h { font-size:16px; font-weight:600; margin:6px 0 4px; }
+  .moment.hl { border-color:rgba(76,194,255,.4); background:rgba(76,194,255,.07); }
+  @media (max-width:760px){ .moments{grid-template-columns:1fr 1fr} .win{grid-template-columns:1fr} .side{display:none} }
+</style>
+
+<div class="v">
+<h2>Vigil, redesigned</h2>
+<p class="subtitle">Rebuilt on Apple's rules: one idea per screen, big plain sentences, color only when it means something, and details hidden until you ask for them.</p>
+
+<!-- ============ 0. WHEN YOU SEE WHAT ============ -->
+<div class="section">
+  <h3>You're right: with the lid closed, no PC screen matters</h3>
+  <p class="cap1" style="color:var(--text-secondary);margin-bottom:12px">So each screen belongs to one moment, and the phone covers the time you're away.</p>
+  <div class="moments">
+    <div class="moment"><div class="k">① Before you leave</div><div class="h">Tray glance</div><div class="cap1">One sentence: "Safe to close the lid." Then you go.</div></div>
+    <div class="moment"><div class="k">② While you're away</div><div class="h">Your phone</div><div class="cap1">The Claude app shows every session. Vigil sends a short note only when something needs you or everything's done.</div></div>
+    <div class="moment"><div class="k">③ When you're back</div><div class="h">Welcome back</div><div class="cap1">A short recap is waiting when you unlock: what got done and what needs you.</div></div>
+    <div class="moment hl"><div class="k">④ Anytime, at the desk</div><div class="h">Vigil window</div><div class="cap1">Your idea: every session, summarized, with a box to reply. You don't need the terminal.</div></div>
+  </div>
+</div>
+
+<!-- ============ 1. TRAY GLANCE ============ -->
+<div class="section">
+  <h3>① Tray glance: click the eye in the taskbar</h3>
+  <div class="scene">
+    <div class="pop glass">
+      <div class="r g10">
+        <div class="appicon"><svg width="16" height="16" viewBox="0 0 100 100" style="color:#8fe6ff"><path d="M8 50 C24 27 38 21 50 21 C62 21 76 27 92 50 C76 73 62 79 50 79 C38 79 24 73 8 50Z" fill="none" stroke="currentColor" stroke-width="8"/><circle cx="50" cy="50" r="7" fill="currentColor"/></svg></div>
+        <div class="cap1" style="font-weight:600;color:var(--t1)">Vigil</div>
+        <div style="flex:1"></div><div class="cap2">⚙</div>
+      </div>
+      <div class="title-xl" style="margin-top:16px">Safe to close the lid.</div>
+      <div class="cap1" style="margin-top:4px">Your PC stays awake until all 3 sessions finish, then sleeps on its own.</div>
+
+      <div style="margin-top:16px">
+        <div class="srow">
+          <div class="glyph" style="background:rgba(255,159,10,.15);color:var(--orange)">!</div>
+          <div style="flex:1"><div class="r sb"><span class="body" style="font-weight:600">card-game</span><span class="pill o">Needs you</span></div>
+          <div class="cap1" style="margin-top:2px">Wants to install Vite 6. Approve here or on your phone.</div></div>
+        </div>
+        <div class="srow">
+          <div class="glyph" style="background:rgba(76,194,255,.13);color:var(--blue)"><span class="dot live" style="background:var(--blue)"></span></div>
+          <div style="flex:1"><div class="r sb"><span class="body" style="font-weight:600">replay-tool</span><span class="cap2">14 min</span></div>
+          <div class="cap1" style="margin-top:2px">Running tests after fixing the replay crash</div></div>
+        </div>
+        <div class="srow">
+          <div class="glyph" style="background:rgba(76,194,255,.13);color:var(--blue)"><span class="dot live" style="background:var(--blue)"></span></div>
+          <div style="flex:1"><div class="r sb"><span class="body" style="font-weight:600">portfolio-site</span><span class="cap2">3 min</span></div>
+          <div class="cap1" style="margin-top:2px">Redesigning the projects grid</div></div>
+        </div>
+      </div>
+
+      <div class="seg" style="margin-top:14px"><div class="on">While working</div><div>For a while</div><div>Always</div></div>
+      <div class="r sb" style="margin-top:12px">
+        <span class="cap1"><span style="color:var(--green)">●</span> Temperature and battery are fine</span>
+        <span class="cap1" style="color:var(--blue)">Open Vigil ›</span>
+      </div>
+      <div class="hold" style="margin-top:12px"><span>Hold to stop</span></div>
+    </div>
+
+    <div style="max-width:300px" class="cap1">
+      <div class="title-l" style="color:var(--t1);margin-bottom:10px">What changed from v1</div>
+      <p style="margin:0 0 8px">• <b style="color:var(--t1)">The headline answers your real question</b>: can I close the lid? It reads like an iPhone Live Activity, understood in a second.</p>
+      <p style="margin:0 0 8px">• <b style="color:var(--t1)">Each session is one human sentence</b>, not a command name.</p>
+      <p style="margin:0 0 8px">• <b style="color:var(--t1)">Heat, battery and phone are hidden when fine.</b> They show up only when something's wrong.</p>
+      <p style="margin:0">• <b style="color:var(--t1)">One color per meaning:</b> blue for working, orange for needs you, green for done, red for danger.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 4. VIGIL WINDOW ============ -->
+<div class="section">
+  <h3>④ The Vigil window: your sessions without the terminal</h3>
+  <div class="scene">
+    <div class="win glass">
+      <div class="side">
+        <div class="cap2" style="padding:4px 10px 10px;text-transform:uppercase;letter-spacing:.08em">Sessions</div>
+        <div class="item"><div class="r sb"><span class="body" style="font-weight:600">card-game</span><span class="dot" style="background:var(--orange)"></span></div><div class="cap1">Needs you · 2m</div></div>
+        <div class="item sel"><div class="r sb"><span class="body" style="font-weight:600">replay-tool</span><span class="dot live" style="background:var(--blue)"></span></div><div class="cap1">Running tests · 14m</div></div>
+        <div class="item"><div class="r sb"><span class="body" style="font-weight:600">portfolio-site</span><span class="dot live" style="background:var(--blue)"></span></div><div class="cap1">Editing · 3m</div></div>
+        <div class="item"><div class="r sb"><span class="body" style="font-weight:600;color:var(--t2)">vigil</span><span class="dot" style="background:var(--green)"></span></div><div class="cap1">Done · 40m ago</div></div>
+        <div class="cap2" style="padding:18px 10px 0">Today · 4 sessions · 31 files</div>
+      </div>
+      <div class="main">
+        <div class="r sb"><div class="cap1">replay-tool · started 11:44 PM</div><span class="pill b"><span class="dot live" style="background:var(--blue);width:6px;height:6px"></span>Working</span></div>
+        <div class="title-xl" style="margin-top:8px">Fixed the replay crash and added frame-by-frame scrubbing. Now checking tests.</div>
+        <div class="facts">
+          <span class="pill">8 files changed</span><span class="pill g">✓ Build passes</span><span class="pill">1 commit</span><span class="pill">No questions yet</span>
+        </div>
+
+        <div class="cap2" style="margin-top:22px;text-transform:uppercase;letter-spacing:.08em">What happened</div>
+        <div class="tl">
+          <div class="e b"><div class="body">Running the full test suite <span class="cap1">· now</span></div></div>
+          <div class="e g"><div class="body">Committed "Add frame scrubbing" <span class="cap1">· 2 min ago</span></div></div>
+          <div class="e"><div class="body">Built the scrubber in the timeline <span class="cap1">· 4 files · 9 min ago</span></div></div>
+          <div class="e"><div class="body">Found the crash: replays with no stage data <span class="cap1">· 13 min ago</span></div></div>
+          <div class="e"><div class="body">You asked: <span style="color:var(--t2)">"fix the replay crash then add scrubbing"</span> <span class="cap1">· 14 min ago</span></div></div>
+        </div>
+        <div class="more">Show Claude's full messages ›</div>
+
+        <div class="composer"><span style="flex:1">Reply to replay-tool…</span><span class="send">↑</span></div>
+        <div class="cap2" style="margin-top:6px">Sends through Claude's Remote Control, exactly like typing in the terminal.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 3. WELCOME BACK ============ -->
+<div class="section">
+  <h3>③ Welcome back: on screen right after you unlock</h3>
+  <div class="scene">
+    <div class="wb glass">
+      <div class="cap1">While you were away · 11:42 PM – 7:18 AM</div>
+      <div class="title-xl" style="font-size:32px;margin-top:6px">2 done. 1 needs you.</div>
+      <div class="stats">
+        <div class="stat"><div class="n" style="color:var(--green)">2</div><div class="cap1" style="margin-top:6px">finished</div></div>
+        <div class="stat"><div class="n" style="color:var(--orange)">1</div><div class="cap1" style="margin-top:6px">waiting on you</div></div>
+        <div class="stat"><div class="n">23</div><div class="cap1" style="margin-top:6px">files changed</div></div>
+      </div>
+
+      <div class="scard need">
+        <div class="r sb"><span class="body" style="font-weight:600">card-game</span><span class="cap1">since 2:10 AM</span></div>
+        <div class="body" style="margin-top:4px;color:var(--t2)">Stopped to ask before installing Vite 6, which is needed to fix the build.</div>
+        <div class="r g8" style="margin-top:12px"><span class="btnp">Approve</span><span class="btns">Open session</span></div>
+      </div>
+      <div class="scard">
+        <div class="r sb"><span class="body" style="font-weight:600">replay-tool</span><span class="pill g">Done</span></div>
+        <div class="body" style="margin-top:4px;color:var(--t2)">Fixed the replay crash and added frame scrubbing. All 48 tests pass and the work is committed.</div>
+        <div class="r g6" style="margin-top:8px"><span class="pill">8 files</span><span class="pill">2h 16m</span><span class="pill o">Asked: snap scrubbing to inputs?</span></div>
+      </div>
+      <div class="scard">
+        <div class="r sb"><span class="body" style="font-weight:600">portfolio-site</span><span class="pill g">Done</span></div>
+        <div class="body" style="margin-top:4px;color:var(--t2)">Rebuilt the projects grid and pushed. The live site has updated.</div>
+        <div class="r g6" style="margin-top:8px"><span class="pill">4 files</span><span class="pill">49m</span><span class="pill">Deployed</span></div>
+      </div>
+      <div class="r sb" style="margin-top:18px">
+        <span class="cap1"><span style="color:var(--green)">●</span> PC slept at 4:33 AM after the last session. Settings restored.</span>
+        <span class="btns">Done</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SUMMARY RULES ============ -->
+<div class="section">
+  <h3>How the short summaries work</h3>
+  <div class="explain">
+    <div><b>1 · Headline (≤ 20 words)</b>What Claude got done and where it's at, in plain English. Written by Claude's fastest model (Haiku) in about 8 seconds, from the session's own log.</div>
+    <div><b>2 · Fact chips</b>Files changed, tests, commits, deploys and errors. These are read straight from the log, never guessed, so the numbers are always exact.</div>
+    <div><b>3 · Timeline</b>One line per real step, newest first. Routine file reads are hidden, and anything with an outcome is kept.</div>
+    <div><b>Never left out</b>Questions Claude asked you · errors and failed tests · installs, deletions, pushes and deploys · anything Claude said it couldn't do · usage limits.</div>
+  </div>
+</div>
+</div>

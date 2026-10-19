@@ -1,0 +1,49 @@
+# .NET build output
+bin/
+obj/
+publish/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa]rm64/
+*.nupkg
+*.snupkg
+
+# Visual Studio, Rider, VS Code
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+*.userprefs
+*.rsuser
+*.DotSettings.user
+
+# Tests and coverage
+TestResults/
+[Tt]est[Rr]esult*/
+coverage*.json
+coverage*.xml
+*.coverage
+
+# Logs, temp files, secrets
+*.log
+*.tmp
+.env
+.env.*
+!.env.example
+
+# Tooling
+.superpowers/
+.vercel/
+node_modules/
+
+# Launch work: drafts, storyboards and review frames stay on this PC
+launch/
+
+# Launch video: build output and raw screen recordings never go public
+video/out/
+video/build/
+video/public/recordings/
+*.raw.mp4

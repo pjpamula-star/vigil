@@ -1,0 +1,17 @@
+{
+  "name": "vigil-phone",
+  "private": true,
+  "type": "module",
+  "description": "Vigil on your phone: status, summaries and push notifications from Vigil on your PC.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@vercel/blob": "^2.8.2",
+    "@vercel/functions": "^3.10.1",
+    "web-push": "^3.6.7"
+  }
+}
