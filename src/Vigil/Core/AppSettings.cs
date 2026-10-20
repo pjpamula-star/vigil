@@ -36,6 +36,9 @@ internal sealed class AppSettings
     public double DeskPillAtX { get; set; } = -1;
     public double DeskPillAtY { get; set; } = -1;
 
+    /// <summary>Docked: where in the taskbar you dropped it (its right edge, in screen units). -1 = the middle of the free space.</summary>
+    public double DeskPillHomeX { get; set; } = -1;
+
     public bool ShowWelcomeBack { get; set; } = true;
     public int WelcomeBackMinAwayMinutes { get; set; } = 1;
     public bool AiHeadlines { get; set; } = true;

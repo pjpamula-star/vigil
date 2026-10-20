@@ -51,8 +51,9 @@ internal sealed class DeskPill : Window
     private string _compactKey = "", _listKey = "";
     private (Session Session, string Text, Color Color)? _headline;
     private DateTime _seenDoneAt = DateTime.Now;
-    private bool _expanded, _primed, _hiddenForFullscreen, _dragged, _probing, _started;
-    private Point? _down;
+    private bool _expanded, _primed, _hiddenForFullscreen, _dragged, _dragging, _probing, _started;
+    private Point? _down;     // where a press began, in screen pixels
+    private Vector _grab;     // from the pill's center to the pointer while dragging, in screen units
     private double _compactW = PillH;
 
     // Where the pill sits: the screen point of its anchored corner, and which way it grows.
@@ -60,6 +61,7 @@ internal sealed class DeskPill : Window
     private bool _up = true, _fromRight = true, _docked = true;
     private Rect? _gap; // the taskbar's empty stretch, in screen units (DIPs)
     private double? _home; // docked: the pill's right edge, chosen once and kept until something would overlap it
+    private double? _wantHome; // docked: where you dropped it in the taskbar; it returns there when there's room
     private bool _inGap, _shown;
     private WinEventProc? _onForeground;
     private IntPtr _hook;
@@ -105,16 +107,27 @@ internal sealed class DeskPill : Window
 
         _capsule.MouseEnter += (_, _) =>
         {
+            if (_dragging) return;
             _fill.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(FillHover, TimeSpan.FromMilliseconds(150)));
             Intent(expand: true, TimeSpan.FromMilliseconds(170));
         };
         _capsule.MouseLeave += (_, _) =>
         {
+            if (_dragging) return;
             _fill.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(Fill, TimeSpan.FromMilliseconds(220)));
             Intent(expand: false, TimeSpan.FromMilliseconds(260));
         };
-        _compactHost.PreviewMouseLeftButtonDown += (_, e) => { _down = PointToScreen(e.GetPosition(this)); _dragged = false; };
-        _compactHost.PreviewMouseMove += OnDrag;
+        // Press anywhere on the pill (or the open panel) and move to drag it. A press without moving is a click.
+        _capsule.PreviewMouseLeftButtonDown += (_, _) => { _down = CursorPx(); _dragged = false; };
+        _capsule.PreviewMouseMove += OnDrag;
+        _capsule.PreviewMouseLeftButtonUp += (_, e) =>
+        {
+            if (!_dragging) return;
+            e.Handled = true; // a drag is not a click on whatever row it ended over
+            EndDrag();
+        };
+        _capsule.LostMouseCapture += (_, _) => { if (_dragging) EndDrag(); };
+        _capsule.AddHandler(MouseLeftButtonUpEvent, new MouseButtonEventHandler((_, _) => _down = null), handledEventsToo: true);
         _compactHost.MouseLeftButtonUp += (_, _) =>
         {
             if (!_dragged && _down is not null) _app.ShowHappened(null);
@@ -123,7 +136,14 @@ internal sealed class DeskPill : Window
         _capsule.ContextMenu = Menu();
 
         _hover = new DispatcherTimer(DispatcherPriority.Normal, Dispatcher);
-        _hover.Tick += (_, _) => { _hover.Stop(); if (_hover.Tag is true) Expand(); else Collapse(); };
+        _hover.Tick += (_, _) =>
+        {
+            _hover.Stop();
+            if (_dragging) return;
+            // Don't burst open under a press: that's someone about to drag.
+            if (_hover.Tag is true) { if (Mouse.LeftButton == MouseButtonState.Pressed) _hover.Start(); else Expand(); }
+            else Collapse();
+        };
         _news = new DispatcherTimer(TimeSpan.FromSeconds(6), DispatcherPriority.Normal, (_, _) => { _news!.Stop(); _headline = null; Refresh(); }, Dispatcher);
         _news.Stop();
         _tick = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, (_, _) =>
@@ -149,6 +169,7 @@ internal sealed class DeskPill : Window
         _started = true;
         var s = _app.Engine.Settings;
         _docked = s.DeskPillAtX < 0;
+        _wantHome = s.DeskPillHomeX >= 0 ? s.DeskPillHomeX : null;
         if (!_docked) SetAnchorFromPoint(new Point(s.DeskPillAtX, s.DeskPillAtY));
         else Place(null);
         _upkeep.Start();
@@ -203,7 +224,7 @@ internal sealed class DeskPill : Window
             // as little as needed to stay clear.
             var lo = g.Left + edge + _compactW;
             var hi = g.Right - edge;
-            _home = Math.Round(_home is { } h ? Math.Clamp(h, lo, hi) : Math.Clamp(g.Left + (g.Width + _compactW) / 2, lo, hi));
+            _home = Math.Round((_wantHome ?? _home) is { } h ? Math.Clamp(h, lo, hi) : Math.Clamp(g.Left + (g.Width + _compactW) / 2, lo, hi));
             _anchor = new Point(_home.Value, Math.Round(g.Top + (g.Height + PillH) / 2));
             _inGap = true;
         }
@@ -249,11 +270,38 @@ internal sealed class DeskPill : Window
         left = Math.Clamp(left, screen.Left - Pad, screen.Right - WinW + Pad);
         top = Math.Clamp(top, screen.Top - Pad, screen.Bottom - WinH + Pad);
         if (Math.Abs(left - Left) < 0.5 && Math.Abs(top - Top) < 0.5) return; // already there: don't touch it
-        BeginAnimation(LeftProperty, null);
-        if (glide && _started && Math.Abs(top - Top) < 0.5)
-            BeginAnimation(LeftProperty, new DoubleAnimation(left, TimeSpan.FromMilliseconds(450)) { EasingFunction = Smooth() });
+        StopGlide();
+        if (glide && _started && !_dragging && Math.Abs(top - Top) < 0.5)
+        {
+            var glideTo = new DoubleAnimation(left, TimeSpan.FromMilliseconds(450)) { EasingFunction = Smooth() };
+            // Hand the final spot back to the window itself once it gets there, so nothing keeps holding
+            // the old animated value (that held value is what used to snap the pill back after a drag).
+            glideTo.Completed += (_, _) => { if (Math.Abs(Left - left) < 0.5) { Left = left; BeginAnimation(LeftProperty, null); } };
+            BeginAnimation(LeftProperty, glideTo);
+        }
         else Left = left;
         Top = top;
+    }
+
+    /// <summary>Stop a glide where it is, without a jump.</summary>
+    private void StopGlide()
+    {
+        var at = Left;
+        Left = at;
+        BeginAnimation(LeftProperty, null);
+    }
+
+    /// <summary>The middle of the small pill, in screen units, from where its corner is anchored.</summary>
+    private Point PillCenter() => new(
+        _anchor.X + (_fromRight ? -_compactW / 2 : _compactW / 2),
+        _anchor.Y + (_up ? -PillH / 2 : PillH / 2));
+
+    private Point CursorPx() => GetCursorPos(out var p) ? new Point(p.X, p.Y) : default;
+
+    private Point CursorDip()
+    {
+        var px = CursorPx();
+        return PresentationSource.FromVisual(this)?.CompositionTarget is { } t ? t.TransformFromDevice.Transform(px) : px;
     }
 
     private int _upkeeps;
@@ -273,7 +321,7 @@ internal sealed class DeskPill : Window
 
         // The taskbar's layout, every other time (4 s): reading it through UI Automation costs Vigil and
         // Explorer real CPU, and the taskbar rarely changes faster than that.
-        if (_docked && !_expanded && !_probing && ++_upkeeps % 2 == 0) _ = ProbeAsync();
+        if (_docked && !_expanded && !_dragging && !_probing && ++_upkeeps % 2 == 0) _ = ProbeAsync();
     }
 
     private async Task ProbeAsync()
@@ -288,7 +336,7 @@ internal sealed class DeskPill : Window
                 var m = target.TransformFromDevice;
                 dip = new Rect(m.Transform(p.TopLeft), m.Transform(p.BottomRight));
             }
-            if (_docked && !_expanded && dip != _gap)
+            if (_docked && !_expanded && !_dragging && dip != _gap)
             {
                 _gap = dip;
                 Place(dip, glide: _shown);
@@ -298,25 +346,89 @@ internal sealed class DeskPill : Window
         finally { _probing = false; }
     }
 
+    // ---------- dragging ----------
+    // Our own drag instead of DragMove: the pill shrinks back to its small shape the moment you start,
+    // stays under your pointer the whole way, nothing else moves it meanwhile, and it stays exactly
+    // where you let go. Drop it on the taskbar and it docks at that spot.
+
     private void OnDrag(object sender, MouseEventArgs e)
     {
-        if (_down is not { } down || e.LeftButton != MouseButtonState.Pressed) return;
-        var now = PointToScreen(e.GetPosition(this));
-        if (Math.Abs(now.X - down.X) < 6 && Math.Abs(now.Y - down.Y) < 6) return;
-        _dragged = true;
-        _down = null;
-        _hover.Stop();
-        try { DragMove(); } catch (InvalidOperationException) { return; }
+        if (e.LeftButton != MouseButtonState.Pressed) return;
+        if (_dragging) { DragTo(CursorDip()); return; }
+        if (_down is not { } down) return;
+        var now = CursorPx();
+        if (Math.Abs(now.X - down.X) < 5 && Math.Abs(now.Y - down.Y) < 5) return;
+        BeginDrag();
+    }
 
-        // Where the pill landed (its center), in screen units.
-        var tl = _capsule.TranslatePoint(new Point(0, 0), this);
-        var center = new Point(Left + tl.X + _capsule.ActualWidth / 2, Top + tl.Y + _capsule.ActualHeight / 2);
-        _docked = false;
-        SetAnchorFromPoint(center);
+    private void BeginDrag()
+    {
+        _dragging = _dragged = true;
+        _hover.Stop();
+        StopGlide();
+        if (_expanded) CollapseNow();
+
+        // Keep the spot you grabbed under the pointer; if you grabbed the open panel, the small pill
+        // comes to the pointer instead.
+        var cursor = CursorDip();
+        var off = cursor - PillCenter();
+        _grab = new Vector(Math.Clamp(off.X, -_compactW / 2, _compactW / 2), Math.Clamp(off.Y, -PillH / 2, PillH / 2));
+        _capsule.CaptureMouse();
+        DragTo(cursor);
+    }
+
+    private void DragTo(Point cursor) => SetAnchorFromPoint(cursor - _grab);
+
+    private void EndDrag()
+    {
+        _dragging = false;
+        _down = null;
+        if (Mouse.Captured == _capsule) _capsule.ReleaseMouseCapture();
+
+        var center = PillCenter();
         var s = _app.Engine.Settings;
-        s.DeskPillAtX = Math.Round(center.X);
-        s.DeskPillAtY = Math.Round(center.Y);
+        var work = SystemParameters.WorkArea;
+        var onTaskbar = center.Y > work.Bottom && center.X >= work.Left && center.X <= work.Right;
+        if (onTaskbar)
+        {
+            // Dock right here. The next look at the taskbar nudges it clear of buttons if it has to.
+            var wasDocked = _docked;
+            _docked = true;
+            _wantHome = _home = Math.Round(center.X + _compactW / 2);
+            s.DeskPillAtX = s.DeskPillAtY = -1;
+            s.DeskPillHomeX = _wantHome.Value;
+            if (wasDocked && _gap is not null) Place(_gap, glide: true);
+            else
+            {
+                _gap = null;
+                _up = _fromRight = true;
+                _anchor = new Point(_home.Value, Math.Round(center.Y + PillH / 2));
+                Arrange();
+            }
+            _ = ProbeAsync();
+        }
+        else
+        {
+            _docked = false;
+            _gap = null;
+            SetAnchorFromPoint(center);
+            s.DeskPillAtX = Math.Round(center.X);
+            s.DeskPillAtY = Math.Round(center.Y);
+        }
         s.Save();
+        _fill.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(_capsule.IsMouseOver ? FillHover : Fill, TimeSpan.FromMilliseconds(150)));
+    }
+
+    /// <summary>Back to the small pill at once, no animation (for the start of a drag).</summary>
+    private void CollapseNow()
+    {
+        Collapse();
+        _capsule.BeginAnimation(WidthProperty, null);
+        _capsule.BeginAnimation(HeightProperty, null);
+        _capsule.Width = _compactW;
+        _capsule.Height = PillH;
+        _listHost.BeginAnimation(OpacityProperty, null);
+        _listHost.Opacity = 0;
     }
 
     private ContextMenu Menu()
@@ -333,10 +445,11 @@ internal sealed class DeskPill : Window
         {
             var s = _app.Engine.Settings;
             s.DeskPillAtX = s.DeskPillAtY = -1;
+            s.DeskPillHomeX = -1;
             s.Save();
             _docked = true;
             _gap = null;
-            _home = null;
+            _home = _wantHome = null;
             Place(null);
             _ = ProbeAsync();
         });
@@ -381,7 +494,7 @@ internal sealed class DeskPill : Window
             next.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(200)) { BeginTime = TimeSpan.FromMilliseconds(70) });
         _compactHost.Width = _expanded ? PanelW : _compactW;
         if (!_expanded) Morph(_compactW, PillH, TimeSpan.FromMilliseconds(320));
-        if (_docked && _started && !_expanded && _gap is not null) Place(_gap, glide: true);
+        if (_docked && _started && !_expanded && !_dragging && _gap is not null) Place(_gap, glide: true);
     }
 
     /// <summary>Something just finished or started waiting on you: the pill says which, for a few seconds.</summary>
@@ -723,6 +836,8 @@ internal sealed class DeskPill : Window
     [DllImport("user32.dll")] private static extern int SetWindowLong(IntPtr hwnd, int index, int value);
     [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr hwnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
     [DllImport("shell32.dll")] private static extern int SHQueryUserNotificationState(out int state);
+    [StructLayout(LayoutKind.Sequential)] private struct POINT { public int X, Y; }
+    [DllImport("user32.dll")] private static extern bool GetCursorPos(out POINT p);
 
     private const uint EVENT_SYSTEM_FOREGROUND = 3;
     private delegate void WinEventProc(IntPtr hook, uint ev, IntPtr hwnd, int obj, int child, uint thread, uint time);
