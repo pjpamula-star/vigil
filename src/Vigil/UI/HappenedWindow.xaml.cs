@@ -38,12 +38,16 @@ public partial class HappenedWindow : Window
 
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
     {
-        // Closing just hides; reopening is instant and keeps what you expanded.
+        // Closing just hides; reopening keeps what you expanded.
         if (!_app.Quitting)
         {
             e.Cancel = true;
             Hide();
             _example = null;
+            // A hidden window's endless animations (the working rings, the chart's breathing bar) keep WPF
+            // drawing 60 times a second for nobody: about a third of a CPU core, all day. Every way of
+            // showing the window again builds the content first, so let it go.
+            Body.Children.Clear();
         }
         base.OnClosing(e);
     }
