@@ -209,12 +209,12 @@ public partial class App : Application
             catch (Exception ex) { Log.Error("Connect from command line failed", ex); }
         }
 
+        // First run (or hooks missing): the welcome comes first, even with --pair, so Claude Code gets
+        // connected; pairing opens beside it.
+        var setUp = settings.FirstRunDone && HooksInstalled;
+        if (!setUp && (args.Contains("--pair") || !args.Contains("--background"))) ShowWelcome();
         if (args.Contains("--pair")) Dispatcher.BeginInvoke(ShowPhonePairing);
-        else if (!args.Contains("--background"))
-        {
-            if (!settings.FirstRunDone || !HooksInstalled) ShowWelcome();
-            else TogglePopover();
-        }
+        else if (setUp && !args.Contains("--background")) TogglePopover();
     }
 
     private void RefreshUi()
