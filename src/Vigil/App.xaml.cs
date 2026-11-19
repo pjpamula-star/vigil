@@ -71,14 +71,7 @@ public partial class App : Application
         // "Vigil.exe --quit": ask the running copy to exit cleanly (used by the installer).
         if (args.Contains("--quit"))
         {
-            var until = DateTime.UtcNow.AddSeconds(60);
-            do
-            {
-                try { EventWaitHandle.OpenExisting(QuitSignalName).Set(); } catch { }
-                if (!Mutex.TryOpenExisting(InstanceName, out var held)) break; // no copy left
-                held.Dispose();
-                Thread.Sleep(500);
-            } while (DateTime.UtcNow < until);
+            try { using var q = EventWaitHandle.OpenExisting(QuitSignalName); q.Set(); } catch { }
             Shutdown();
             return;
         }
@@ -108,40 +101,32 @@ public partial class App : Application
             else _instance = new Mutex(true, InstanceName, out isFirst);
             if (!isFirst)
             {
-                // Already running: ask it to show itself (or the iPhone pairing window). During a render
-                // restart nobody answers for a moment, so keep asking until the new copy does (up to 30 s).
-                var signalName = args.Contains("--pair") ? PairSignalName : ShowSignalName;
-                for (var tries = 0; tries < 60; tries++)
-                {
-                    try { EventWaitHandle.OpenExisting(signalName).Set(); break; }
-                    catch { Thread.Sleep(500); }
-                }
+                // Already running: ask it to show itself (or the iPhone pairing window).
+                try { using var w = EventWaitHandle.OpenExisting(args.Contains("--pair") ? PairSignalName : ShowSignalName); w.Set(); } catch { }
                 Shutdown();
                 return;
             }
             _startedAt = DateTime.UtcNow;
-            _showSignal = new EventWaitHandle(false, EventResetMode.AutoReset, ShowSignalName);
-            var signal = _showSignal;
-            new Thread(() =>
+            // A named event keeps its state while any process holds it, so a signal meant for the copy
+            // before this one could still be set: start clear. A listener ends quietly once OnExit has
+            // disposed its handle (a signal that arrives while quitting must not crash the process).
+            EventWaitHandle Listen(string name, string thread, Action onSignal, bool once = false)
             {
-                while (signal.WaitOne())
-                    Dispatcher.BeginInvoke(() => ShowHappened(null));
-            }) { IsBackground = true, Name = "show-signal" }.Start();
-
-            _pairSignal = new EventWaitHandle(false, EventResetMode.AutoReset, PairSignalName);
-            var pairSignal = _pairSignal;
-            new Thread(() =>
-            {
-                while (pairSignal.WaitOne())
-                    Dispatcher.BeginInvoke(ShowPhonePairing);
-            }) { IsBackground = true, Name = "pair-signal" }.Start();
-
-            _quitSignal = new EventWaitHandle(false, EventResetMode.AutoReset, QuitSignalName);
-            var quit = _quitSignal;
-            new Thread(() =>
-            {
-                if (quit.WaitOne()) Dispatcher.BeginInvoke(Quit);
-            }) { IsBackground = true, Name = "quit-signal" }.Start();
+                var h = new EventWaitHandle(false, EventResetMode.AutoReset, name);
+                h.Reset();
+                new Thread(() =>
+                {
+                    try
+                    {
+                        do { if (!h.WaitOne()) return; Dispatcher.BeginInvoke(onSignal); } while (!once);
+                    }
+                    catch (ObjectDisposedException) { }
+                }) { IsBackground = true, Name = thread }.Start();
+                return h;
+            }
+            _showSignal = Listen(ShowSignalName, "show-signal", () => ShowHappened(null));
+            _pairSignal = Listen(PairSignalName, "pair-signal", ShowPhonePairing);
+            _quitSignal = Listen(QuitSignalName, "quit-signal", Quit, once: true);
 
             DispatcherUnhandledException += (_, ex) =>
             {
