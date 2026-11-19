@@ -88,14 +88,14 @@ public partial class App : Application
         if (!demo && !testInstance)
         {
             _instance = new Mutex(true, InstanceName, out var isFirst);
-            if (!isFirst)
             // After a render-failure restart the old copy may still be closing: wait for it.
-            for (var tries = 0; !isFirst && _renderRestarts > 0 && tries < 40; tries++)
+            for (var tries = 0; !isFirst && _renderRestarts > 0 && tries < 80; tries++)
             {
                 _instance.Dispose();
                 Thread.Sleep(250);
                 _instance = new Mutex(true, InstanceName, out isFirst);
             }
+            if (!isFirst)
             {
                 // Already running: ask it to show itself (or the iPhone pairing window).
                 try { EventWaitHandle.OpenExisting(args.Contains("--pair") ? PairSignalName : ShowSignalName).Set(); } catch { }
@@ -128,12 +128,17 @@ public partial class App : Application
             DispatcherUnhandledException += (_, ex) =>
             {
                 ex.Handled = true;
-            };
                 if (IsRenderThreadFailure(ex.Exception)) { RestartAfterRenderFailure(); return; }
                 Log.Error("Unhandled UI exception", ex.Exception);
+            };
             AppDomain.CurrentDomain.UnhandledException += (_, ex) =>
             {
                 Log.Error("Fatal exception", ex.ExceptionObject as Exception);
+                if (IsRenderThreadFailure(ex.ExceptionObject as Exception) && !_restartPending && Environment.ProcessPath is { } exe)
+                {
+                    _restartPending = true;
+                    try { System.Diagnostics.Process.Start(exe, "--render-restart 1"); } catch { }
+                }
                 // Last chance: never leave the PC stuck awake.
                 try { Engine?.Power.Restore(); } catch { }
             };
@@ -446,23 +451,6 @@ public partial class App : Application
         base.OnExit(e);
     }
 
-    // ---------- screenshots (vigil.exe --snapshot <dir>) ----------
-
-    private bool _screenCapture;
-
-    /// <summary>
-    /// The eye's moves side by side (rest, half shut, shut, glancing four ways), big and as real tray
-    /// icons at 16, 24 and 32 px on a dark and a light taskbar, for checking how they read.
-        if (_restartPending && Environment.ProcessPath is { } exe)
-        {
-            // Count only failures that come soon after the last restart, so one bad wake a day
-            // never adds up to software drawing.
-            var count = DateTime.UtcNow - _startedAt < TimeSpan.FromMinutes(2) ? _renderRestarts + 1 : 1;
-            try { System.Diagnostics.Process.Start(exe, $"--render-restart {count}"); }
-            catch (Exception ex) { Log.Error("Restart after render failure", ex); }
-        }
-    }
-
     // ---------- render failure recovery ----------
 
     // When the PC wakes, the graphics driver can reset under WPF. WPF's render thread then dies
@@ -486,8 +474,26 @@ public partial class App : Application
         if (_restartPending) return;
         _restartPending = true;
         Log.Warn($"Drawing failed after wake (UCEERR_RENDERTHREADFAILURE); restarting Vigil (restart {_renderRestarts + 1})");
+        // Start the new copy first: shutting down with a dead render thread can crash before the end.
+        // The new copy waits for this one to let go of the single-instance lock.
+        // Count only failures soon after the last restart, so one bad wake a day never adds up to software drawing.
+        var count = DateTime.UtcNow - _startedAt < TimeSpan.FromMinutes(2) ? _renderRestarts + 1 : 1;
+        if (Environment.ProcessPath is { } exe)
+        {
+            try { System.Diagnostics.Process.Start(exe, $"--render-restart {count}"); }
+            catch (Exception ex) { Log.Error("Restart after render failure", ex); }
+        }
         Quitting = true;
         Shutdown();
+    }
+
+    // ---------- screenshots (vigil.exe --snapshot <dir>) ----------
+
+    private bool _screenCapture;
+
+    /// <summary>
+    /// The eye's moves side by side (rest, half shut, shut, glancing four ways), big and as real tray
+    /// icons at 16, 24 and 32 px on a dark and a light taskbar, for checking how they read.
     /// </summary>
     private static void EyeSheet(string path)
     {
