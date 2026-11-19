@@ -98,15 +98,16 @@ public partial class App : Application
         {
             // After a render-failure restart the old copy may still be closing: wait for that process to end,
             // then for the lock. No time limit: a crash report dialog can keep it open until someone closes it.
-            System.Diagnostics.Process? unsure = null; // the old copy's id, when its start time couldn't be read
             if (afterPid > 0)
             {
                 try
                 {
                     using var old = System.Diagnostics.Process.GetProcessById(afterPid);
+                    // The old copy is this same program run by this same user, so its start time can always
+                    // be read. If it can't, the id now belongs to another program: don't wait on that.
                     bool same;
                     try { same = afterStart == 0 || old.StartTime.ToFileTimeUtc() == afterStart; }
-                    catch { same = false; unsure = System.Diagnostics.Process.GetProcessById(afterPid); }
+                    catch { same = false; }
                     if (same)
                     {
                         if (!old.WaitForExit(TimeSpan.FromMinutes(1)))
@@ -120,14 +121,12 @@ public partial class App : Application
                 catch (Exception ex) { Log.Warn($"Waiting for the old copy: {ex.Message}"); }
             }
             _instance = new Mutex(true, InstanceName, out var isFirst);
-            // 5 s, or up to 2 minutes while a process that may be the old copy is still running.
-            for (var tries = 0; !isFirst && _renderRestarts > 0 && (tries < 20 || (tries < 480 && IsRunning(unsure))); tries++)
+            for (var tries = 0; !isFirst && _renderRestarts > 0 && tries < 20; tries++)
             {
                 _instance.Dispose();
                 Thread.Sleep(250);
                 _instance = new Mutex(true, InstanceName, out isFirst);
             }
-            unsure?.Dispose();
             if (!isFirst && _renderRestarts > 0)
             {
                 // The copy being replaced never let go. Don't signal it: it can't draw.
@@ -176,7 +175,15 @@ public partial class App : Application
             {
                 Log.Error("Fatal exception", ex.ExceptionObject as Exception);
                 // This process is ending; a new copy waits for it to be gone.
-                if (IsRenderThreadFailure(ex.ExceptionObject as Exception)) StartReplacement(lastChance: true);
+                if (IsRenderThreadFailure(ex.ExceptionObject as Exception)
+                    && StartReplacement(lastChance: true) == Replacement.Skipped)
+                {
+                    // The UI thread is starting one right now. Wait for its result (its alive check takes
+                    // 2 s), and try once more if it failed.
+                    for (var i = 0; i < 40 && Volatile.Read(ref _replacementStarted) == 1 && !Volatile.Read(ref _replacementRunning); i++)
+                        Thread.Sleep(100);
+                    if (!Volatile.Read(ref _replacementRunning)) StartReplacement(lastChance: true);
+                }
                 // Last chance: never leave the PC stuck awake.
                 try { Engine?.Power.Restore(); } catch { }
             };
@@ -499,6 +506,7 @@ public partial class App : Application
     private int _replacementStarted; // 0 or 1; set with Interlocked (the UI thread and a crashing thread can race)
     private long _replacementFailedTicks; // when starting a new copy last failed (UTC ticks), for the retry wait
     private bool _toldCantDraw;
+    private bool _replacementRunning; // a new copy really started
 
     private enum Replacement { Started, Skipped, Failed }
 
@@ -572,7 +580,7 @@ public partial class App : Application
                     bool exited;
                     try { exited = started.WaitForExit(2000); }
                     catch { exited = false; } // can't check: it was started, so count it as running
-                    if (!exited) return Replacement.Started;
+                    if (!exited) { Volatile.Write(ref _replacementRunning, true); return Replacement.Started; }
                 }
                 Log.Warn("Render restart: the new copy of Vigil ended at once");
             }
@@ -582,11 +590,6 @@ public partial class App : Application
         Volatile.Write(ref _replacementFailedTicks, DateTime.UtcNow.Ticks);
         Volatile.Write(ref _replacementStarted, 0);
         return Replacement.Failed;
-    }
-
-    private static bool IsRunning(System.Diagnostics.Process? p)
-    {
-        try { return p is { HasExited: false }; } catch { return false; }
     }
 
     private static System.Diagnostics.ProcessStartInfo? ReplacementStartInfo(string args)
