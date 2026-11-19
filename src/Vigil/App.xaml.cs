@@ -107,13 +107,14 @@ public partial class App : Application
                 return;
             }
             _startedAt = DateTime.UtcNow;
-            // A named event keeps its state while any process holds it, so a signal meant for the copy
-            // before this one could still be set: start clear. A listener ends quietly once OnExit has
-            // disposed its handle (a signal that arrives while quitting must not crash the process).
+            // A named event keeps its state while any process holds it, so a Quit meant for the copy before
+            // this one could still be set: clear that one. (A waiting Show or Pair is a real request: keep it.)
+            // The listener threads run until the process ends; the catch keeps a signal that arrives after
+            // OnExit disposed the handle from crashing the process.
             EventWaitHandle Listen(string name, string thread, Action onSignal, bool once = false)
             {
                 var h = new EventWaitHandle(false, EventResetMode.AutoReset, name);
-                h.Reset();
+                if (once) h.Reset();
                 new Thread(() =>
                 {
                     try
@@ -208,7 +209,8 @@ public partial class App : Application
             catch (Exception ex) { Log.Error("Connect from command line failed", ex); }
         }
 
-        if (!args.Contains("--background"))
+        if (args.Contains("--pair")) Dispatcher.BeginInvoke(ShowPhonePairing);
+        else if (!args.Contains("--background"))
         {
             if (!settings.FirstRunDone || !HooksInstalled) ShowWelcome();
             else TogglePopover();
