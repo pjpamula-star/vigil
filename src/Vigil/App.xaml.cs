@@ -98,12 +98,16 @@ public partial class App : Application
         {
             // After a render-failure restart the old copy may still be closing: wait for that process to end,
             // then for the lock. No time limit: a crash report dialog can keep it open until someone closes it.
+            System.Diagnostics.Process? unsure = null; // the old copy's id, when its start time couldn't be read
             if (afterPid > 0)
             {
                 try
                 {
                     using var old = System.Diagnostics.Process.GetProcessById(afterPid);
-                    if (afterStart == 0 || old.StartTime.ToFileTimeUtc() == afterStart)
+                    bool same;
+                    try { same = afterStart == 0 || old.StartTime.ToFileTimeUtc() == afterStart; }
+                    catch { same = false; unsure = System.Diagnostics.Process.GetProcessById(afterPid); }
+                    if (same)
                     {
                         if (!old.WaitForExit(TimeSpan.FromMinutes(1)))
                         {
@@ -116,12 +120,14 @@ public partial class App : Application
                 catch (Exception ex) { Log.Warn($"Waiting for the old copy: {ex.Message}"); }
             }
             _instance = new Mutex(true, InstanceName, out var isFirst);
-            for (var tries = 0; !isFirst && _renderRestarts > 0 && tries < 20; tries++)
+            // 5 s, or up to 2 minutes while a process that may be the old copy is still running.
+            for (var tries = 0; !isFirst && _renderRestarts > 0 && (tries < 20 || (tries < 480 && IsRunning(unsure))); tries++)
             {
                 _instance.Dispose();
                 Thread.Sleep(250);
                 _instance = new Mutex(true, InstanceName, out isFirst);
             }
+            unsure?.Dispose();
             if (!isFirst && _renderRestarts > 0)
             {
                 // The copy being replaced never let go. Don't signal it: it can't draw.
@@ -170,7 +176,7 @@ public partial class App : Application
             {
                 Log.Error("Fatal exception", ex.ExceptionObject as Exception);
                 // This process is ending; a new copy waits for it to be gone.
-                if (IsRenderThreadFailure(ex.ExceptionObject as Exception)) StartReplacement();
+                if (IsRenderThreadFailure(ex.ExceptionObject as Exception)) StartReplacement(lastChance: true);
                 // Last chance: never leave the PC stuck awake.
                 try { Engine?.Power.Restore(); } catch { }
             };
@@ -492,6 +498,7 @@ public partial class App : Application
     private DateTime _startedAt = DateTime.UtcNow; // reset once the single-instance lock is taken
     private int _replacementStarted; // 0 or 1; set with Interlocked (the UI thread and a crashing thread can race)
     private long _replacementFailedTicks; // when starting a new copy last failed (UTC ticks), for the retry wait
+    private bool _toldCantDraw;
 
     private enum Replacement { Started, Skipped, Failed }
 
@@ -511,8 +518,12 @@ public partial class App : Application
         if (result == Replacement.Skipped) return; // already starting, or waiting before the next try
         if (result == Replacement.Failed)
         {
-            // No new copy: keep this one. It still keeps the PC awake; only its windows are empty.
-            try { _tray?.Toast("Vigil can't draw its windows", "Quit Vigil from the tray icon, then open it again."); } catch { }
+            // No new copy: keep this one. It still keeps the PC awake; only its windows are empty. Say so once.
+            if (!_toldCantDraw)
+            {
+                _toldCantDraw = true;
+                try { _tray?.Toast("Vigil can't draw its windows", "Quit Vigil from the tray icon, then open it again."); } catch { }
+            }
             return;
         }
         Quitting = true;
@@ -530,12 +541,13 @@ public partial class App : Application
 
     /// <summary>
     /// Starts the copy that replaces this one. Started only if a new process is really running. After a
-    /// failed start, waits 10 minutes before the next try (render errors come many times a second).
+    /// failed start, waits 10 minutes before the next try (render errors come many times a second), unless
+    /// this is the last chance (the process is crashing).
     /// </summary>
-    private Replacement StartReplacement()
+    private Replacement StartReplacement(bool lastChance = false)
     {
         if (Interlocked.CompareExchange(ref _replacementStarted, 1, 0) != 0) return Replacement.Skipped;
-        if (DateTime.UtcNow.Ticks - Volatile.Read(ref _replacementFailedTicks) < TimeSpan.FromMinutes(10).Ticks)
+        if (!lastChance && DateTime.UtcNow.Ticks - Volatile.Read(ref _replacementFailedTicks) < TimeSpan.FromMinutes(10).Ticks)
         {
             Volatile.Write(ref _replacementStarted, 0);
             return Replacement.Skipped;
@@ -555,7 +567,13 @@ public partial class App : Application
                 using var started = System.Diagnostics.Process.Start(psi);
                 // The new copy waits for this one to end, so it should still be running a moment later.
                 // If it already exited, it could not start (a broken file, for example).
-                if (started is not null && !started.WaitForExit(2000)) return Replacement.Started;
+                if (started is not null)
+                {
+                    bool exited;
+                    try { exited = started.WaitForExit(2000); }
+                    catch { exited = false; } // can't check: it was started, so count it as running
+                    if (!exited) return Replacement.Started;
+                }
                 Log.Warn("Render restart: the new copy of Vigil ended at once");
             }
             else Log.Warn("Render restart: couldn't start a new copy of Vigil");
@@ -564,6 +582,11 @@ public partial class App : Application
         Volatile.Write(ref _replacementFailedTicks, DateTime.UtcNow.Ticks);
         Volatile.Write(ref _replacementStarted, 0);
         return Replacement.Failed;
+    }
+
+    private static bool IsRunning(System.Diagnostics.Process? p)
+    {
+        try { return p is { HasExited: false }; } catch { return false; }
     }
 
     private static System.Diagnostics.ProcessStartInfo? ReplacementStartInfo(string args)
