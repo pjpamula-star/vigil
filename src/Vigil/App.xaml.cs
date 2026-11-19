@@ -484,6 +484,10 @@ public partial class App : Application
             catch (Exception ex) { Log.Error("Restart after render failure", ex); }
         }
         Quitting = true;
+        // Backstop: if quitting hangs on the dead render thread, this copy keeps the single-instance lock
+        // and the new copy gives up after 20 s. Leave by force well before that.
+        new Thread(() => { Thread.Sleep(12_000); Log.Warn("Quit hung after render failure; exiting"); System.Diagnostics.Process.GetCurrentProcess().Kill(); })
+            { IsBackground = true, Name = "render-restart-exit" }.Start();
         Shutdown();
     }
 
