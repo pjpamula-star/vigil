@@ -491,6 +491,9 @@ public partial class App : Application
     private int _renderRestarts;
     private DateTime _startedAt = DateTime.UtcNow; // reset once the single-instance lock is taken
     private int _replacementStarted; // 0 or 1; set with Interlocked (the UI thread and a crashing thread can race)
+    private long _replacementFailedTicks; // when starting a new copy last failed (UTC ticks), for the retry wait
+
+    private enum Replacement { Started, Skipped, Failed }
 
     internal static bool IsRenderThreadFailure(Exception? ex)
     {
@@ -503,9 +506,10 @@ public partial class App : Application
 
     private void RestartAfterRenderFailure()
     {
-        if (Volatile.Read(ref _replacementStarted) == 1) return; // already handled
         // Start the new copy first: shutting down with a dead render thread can crash before the end.
-        if (!StartReplacement())
+        var result = StartReplacement();
+        if (result == Replacement.Skipped) return; // already starting, or waiting before the next try
+        if (result == Replacement.Failed)
         {
             // No new copy: keep this one. It still keeps the PC awake; only its windows are empty.
             try { _tray?.Toast("Vigil can't draw its windows", "Quit Vigil from the tray icon, then open it again."); } catch { }
@@ -524,10 +528,18 @@ public partial class App : Application
         Shutdown();
     }
 
-    /// <summary>Starts the copy that replaces this one, once. True only if a new process really started.</summary>
-    private bool StartReplacement()
+    /// <summary>
+    /// Starts the copy that replaces this one. Started only if a new process is really running. After a
+    /// failed start, waits 10 minutes before the next try (render errors come many times a second).
+    /// </summary>
+    private Replacement StartReplacement()
     {
-        if (Interlocked.Exchange(ref _replacementStarted, 1) == 1) return false;
+        if (Interlocked.CompareExchange(ref _replacementStarted, 1, 0) != 0) return Replacement.Skipped;
+        if (DateTime.UtcNow.Ticks - Volatile.Read(ref _replacementFailedTicks) < TimeSpan.FromMinutes(10).Ticks)
+        {
+            Volatile.Write(ref _replacementStarted, 0);
+            return Replacement.Skipped;
+        }
         // Count only failures soon after the last restart, so one bad wake a day never adds up to software
         // drawing. Once in software drawing, stay there until Vigil is started normally again.
         var soon = DateTime.UtcNow - _startedAt < TimeSpan.FromMinutes(2);
@@ -541,12 +553,17 @@ public partial class App : Application
             if (ReplacementStartInfo(args) is { } psi)
             {
                 using var started = System.Diagnostics.Process.Start(psi);
-                if (started is not null) return true;
+                // The new copy waits for this one to end, so it should still be running a moment later.
+                // If it already exited, it could not start (a broken file, for example).
+                if (started is not null && !started.WaitForExit(2000)) return Replacement.Started;
+                Log.Warn("Render restart: the new copy of Vigil ended at once");
             }
-            Log.Warn("Render restart: couldn't start a new copy of Vigil");
+            else Log.Warn("Render restart: couldn't start a new copy of Vigil");
         }
         catch (Exception ex) { Log.Error("Restart after render failure", ex); }
-        return false;
+        Volatile.Write(ref _replacementFailedTicks, DateTime.UtcNow.Ticks);
+        Volatile.Write(ref _replacementStarted, 0);
+        return Replacement.Failed;
     }
 
     private static System.Diagnostics.ProcessStartInfo? ReplacementStartInfo(string args)
