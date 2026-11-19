@@ -41,6 +41,8 @@ public partial class App : Application
         var args = e.Args.Select(a => a.ToLowerInvariant()).ToHashSet();
         var rr = Array.FindIndex(e.Args, a => a.Equals("--render-restart", StringComparison.OrdinalIgnoreCase));
         if (rr >= 0 && rr + 1 < e.Args.Length && int.TryParse(e.Args[rr + 1], out var n)) _renderRestarts = n;
+        var after = Array.FindIndex(e.Args, a => a.Equals("--after", StringComparison.OrdinalIgnoreCase));
+        var afterPid = after >= 0 && after + 1 < e.Args.Length && int.TryParse(e.Args[after + 1], out var ap) ? ap : 0;
         // The GPU path failed again and again after restarts: draw in software from now on.
         if (_renderRestarts >= 3) System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
 
@@ -87,13 +89,27 @@ public partial class App : Application
 
         if (!demo && !testInstance)
         {
+            // After a render-failure restart the old copy may still be closing (a crash dump can take a
+            // while): wait for that process to end, then for the lock.
+            if (afterPid > 0)
+            {
+                try { using var old = System.Diagnostics.Process.GetProcessById(afterPid); old.WaitForExit(60_000); }
+                catch (ArgumentException) { } // already gone
+                catch (Exception ex) { Log.Warn($"Waiting for the old copy: {ex.Message}"); }
+            }
             _instance = new Mutex(true, InstanceName, out var isFirst);
-            // After a render-failure restart the old copy may still be closing: wait for it.
-            for (var tries = 0; !isFirst && _renderRestarts > 0 && tries < 80; tries++)
+            for (var tries = 0; !isFirst && _renderRestarts > 0 && tries < 20; tries++)
             {
                 _instance.Dispose();
                 Thread.Sleep(250);
                 _instance = new Mutex(true, InstanceName, out isFirst);
+            }
+            if (!isFirst && _renderRestarts > 0)
+            {
+                // The copy being replaced never let go. Don't signal it: it can't draw.
+                Log.Warn("Render restart: the old copy still holds the lock; giving up");
+                Shutdown();
+                return;
             }
             if (!isFirst)
             {
@@ -102,6 +118,7 @@ public partial class App : Application
                 Shutdown();
                 return;
             }
+            _startedAt = DateTime.UtcNow;
             _showSignal = new EventWaitHandle(false, EventResetMode.AutoReset, ShowSignalName);
             var signal = _showSignal;
             new Thread(() =>
@@ -134,11 +151,8 @@ public partial class App : Application
             AppDomain.CurrentDomain.UnhandledException += (_, ex) =>
             {
                 Log.Error("Fatal exception", ex.ExceptionObject as Exception);
-                if (IsRenderThreadFailure(ex.ExceptionObject as Exception) && !_restartPending && Environment.ProcessPath is { } exe)
-                {
-                    _restartPending = true;
-                    try { System.Diagnostics.Process.Start(exe, "--render-restart 1"); } catch { }
-                }
+                // This process is ending; a new copy waits for it to be gone.
+                if (IsRenderThreadFailure(ex.ExceptionObject as Exception)) StartReplacement();
                 // Last chance: never leave the PC stuck awake.
                 try { Engine?.Power.Restore(); } catch { }
             };
@@ -457,8 +471,8 @@ public partial class App : Application
     // (UCEERR_RENDERTHREADFAILURE) and never comes back: every window opens empty. The only
     // cure is a new process, so Vigil restarts itself.
     private int _renderRestarts;
-    private readonly DateTime _startedAt = DateTime.UtcNow;
-    private bool _restartPending;
+    private DateTime _startedAt = DateTime.UtcNow; // reset once the single-instance lock is taken
+    private int _replacementStarted; // 0 or 1; set with Interlocked (the UI thread and a crashing thread can race)
 
     internal static bool IsRenderThreadFailure(Exception? ex)
     {
@@ -471,24 +485,50 @@ public partial class App : Application
 
     private void RestartAfterRenderFailure()
     {
-        if (_restartPending) return;
-        _restartPending = true;
-        Log.Warn($"Drawing failed after wake (UCEERR_RENDERTHREADFAILURE); restarting Vigil (restart {_renderRestarts + 1})");
         // Start the new copy first: shutting down with a dead render thread can crash before the end.
-        // The new copy waits for this one to let go of the single-instance lock.
-        // Count only failures soon after the last restart, so one bad wake a day never adds up to software drawing.
-        var count = DateTime.UtcNow - _startedAt < TimeSpan.FromMinutes(2) ? _renderRestarts + 1 : 1;
-        if (Environment.ProcessPath is { } exe)
-        {
-            try { System.Diagnostics.Process.Start(exe, $"--render-restart {count}"); }
-            catch (Exception ex) { Log.Error("Restart after render failure", ex); }
-        }
+        if (!StartReplacement()) return;
         Quitting = true;
-        // Backstop: if quitting hangs on the dead render thread, this copy keeps the single-instance lock
-        // and the new copy gives up after 20 s. Leave by force well before that.
-        new Thread(() => { Thread.Sleep(12_000); Log.Warn("Quit hung after render failure; exiting"); System.Diagnostics.Process.GetCurrentProcess().Kill(); })
-            { IsBackground = true, Name = "render-restart-exit" }.Start();
+        // Backstop: if quitting hangs on the dead render thread, put the power plan back and end by force,
+        // so the new copy (waiting for this process) can take over.
+        new Thread(() =>
+        {
+            Thread.Sleep(12_000);
+            Log.Warn("Quit hung after render failure; exiting");
+            try { Engine?.Power.Restore(); } catch { }
+            System.Diagnostics.Process.GetCurrentProcess().Kill();
+        }) { IsBackground = true, Name = "render-restart-exit" }.Start();
         Shutdown();
+    }
+
+    /// <summary>Starts the copy that replaces this one, once. False if it was already started.</summary>
+    private bool StartReplacement()
+    {
+        if (Interlocked.Exchange(ref _replacementStarted, 1) == 1) return false;
+        // Count only failures soon after the last restart, so one bad wake a day never adds up to software
+        // drawing. Once in software drawing, stay there until Vigil is started normally again.
+        var soon = DateTime.UtcNow - _startedAt < TimeSpan.FromMinutes(2);
+        var count = soon || _renderRestarts >= 3 ? _renderRestarts + 1 : 1;
+        Log.Warn($"Drawing failed (UCEERR_RENDERTHREADFAILURE); restarting Vigil (restart {count})");
+        try
+        {
+            if (ReplacementStartInfo($"--render-restart {count} --after {Environment.ProcessId}") is { } psi)
+                System.Diagnostics.Process.Start(psi);
+            else Log.Warn("Render restart: can't find Vigil's own program file");
+        }
+        catch (Exception ex) { Log.Error("Restart after render failure", ex); }
+        return true;
+    }
+
+    private static System.Diagnostics.ProcessStartInfo? ReplacementStartInfo(string args)
+    {
+        if (Environment.ProcessPath is not { } exe) return null;
+        // Run as "dotnet Vigil.dll": start dotnet with the same dll, not dotnet alone.
+        if (exe.EndsWith("dotnet.exe", StringComparison.OrdinalIgnoreCase))
+        {
+            var dll = System.Reflection.Assembly.GetEntryAssembly()?.Location;
+            return string.IsNullOrEmpty(dll) ? null : new(exe, $"\"{dll}\" {args}");
+        }
+        return new(exe, args);
     }
 
     // ---------- screenshots (vigil.exe --snapshot <dir>) ----------
