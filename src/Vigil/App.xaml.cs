@@ -71,7 +71,14 @@ public partial class App : Application
         // "Vigil.exe --quit": ask the running copy to exit cleanly (used by the installer).
         if (args.Contains("--quit"))
         {
-            try { EventWaitHandle.OpenExisting(QuitSignalName).Set(); } catch { }
+            var until = DateTime.UtcNow.AddSeconds(60);
+            do
+            {
+                try { EventWaitHandle.OpenExisting(QuitSignalName).Set(); } catch { }
+                if (!Mutex.TryOpenExisting(InstanceName, out var held)) break; // no copy left
+                held.Dispose();
+                Thread.Sleep(500);
+            } while (DateTime.UtcNow < until);
             Shutdown();
             return;
         }
@@ -90,8 +97,8 @@ public partial class App : Application
             bool isFirst;
             if (_renderRestarts > 0)
             {
-                // A render-failure restart: the copy being replaced holds the lock until it has quit, and
-                // Windows frees it when that process ends in any other way (crash, kill). Wait for it with no
+                // A render-failure restart: the copy being replaced holds the lock until its process has
+                // fully ended (quit, crash or kill), and then Windows frees it. Wait for it with no
                 // time limit: a crash report dialog can keep the old copy open until someone closes it.
                 _instance = new Mutex(false, InstanceName);
                 try { _instance.WaitOne(); }
@@ -101,8 +108,14 @@ public partial class App : Application
             else _instance = new Mutex(true, InstanceName, out isFirst);
             if (!isFirst)
             {
-                // Already running: ask it to show itself (or the iPhone pairing window).
-                try { EventWaitHandle.OpenExisting(args.Contains("--pair") ? PairSignalName : ShowSignalName).Set(); } catch { }
+                // Already running: ask it to show itself (or the iPhone pairing window). During a render
+                // restart nobody answers for a moment, so keep asking until the new copy does (up to 30 s).
+                var signalName = args.Contains("--pair") ? PairSignalName : ShowSignalName;
+                for (var tries = 0; tries < 60; tries++)
+                {
+                    try { EventWaitHandle.OpenExisting(signalName).Set(); break; }
+                    catch { Thread.Sleep(500); }
+                }
                 Shutdown();
                 return;
             }
@@ -450,7 +463,8 @@ public partial class App : Application
         _showSignal?.Dispose();
         _quitSignal?.Dispose();
         _pairSignal?.Dispose();
-        try { _instance?.ReleaseMutex(); } catch { } // throws if this copy never owned it
+        // Don't release the lock here: Windows frees it once this process has fully ended. A copy waiting
+        // after a render failure must not start while this one can still touch the power plan.
         _instance?.Dispose();
         base.OnExit(e);
     }
@@ -494,8 +508,9 @@ public partial class App : Application
             return;
         }
         Quitting = true;
-        // Backstop: if quitting hangs on the dead render thread, put the power plan back and end by force,
-        // so the new copy (waiting for this process) can take over.
+        // Backstop: if quitting hangs on the dead render thread, put the power plan back and end by force.
+        // The new copy can't start before this process has ended (it waits for the lock), so the restore
+        // never touches the new copy's settings.
         new Thread(() =>
         {
             Thread.Sleep(12_000);
