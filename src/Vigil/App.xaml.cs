@@ -42,7 +42,14 @@ public partial class App : Application
         var rr = Array.FindIndex(e.Args, a => a.Equals("--render-restart", StringComparison.OrdinalIgnoreCase));
         if (rr >= 0 && rr + 1 < e.Args.Length && int.TryParse(e.Args[rr + 1], out var n)) _renderRestarts = n;
         var after = Array.FindIndex(e.Args, a => a.Equals("--after", StringComparison.OrdinalIgnoreCase));
-        var afterPid = after >= 0 && after + 1 < e.Args.Length && int.TryParse(e.Args[after + 1], out var ap) ? ap : 0;
+        // "--after <pid>:<start time>": the start time tells the old copy apart from a program that got its id later.
+        int afterPid = 0; long afterStart = 0;
+        if (after >= 0 && after + 1 < e.Args.Length)
+        {
+            var parts = e.Args[after + 1].Split(':');
+            int.TryParse(parts[0], out afterPid);
+            if (parts.Length > 1) long.TryParse(parts[1], out afterStart);
+        }
         // The GPU path failed again and again after restarts: draw in software from now on.
         if (_renderRestarts >= 3) System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
 
@@ -89,11 +96,22 @@ public partial class App : Application
 
         if (!demo && !testInstance)
         {
-            // After a render-failure restart the old copy may still be closing (a crash dump can take a
-            // while): wait for that process to end, then for the lock.
+            // After a render-failure restart the old copy may still be closing: wait for that process to end,
+            // then for the lock. No time limit: a crash report dialog can keep it open until someone closes it.
             if (afterPid > 0)
             {
-                try { using var old = System.Diagnostics.Process.GetProcessById(afterPid); old.WaitForExit(60_000); }
+                try
+                {
+                    using var old = System.Diagnostics.Process.GetProcessById(afterPid);
+                    if (afterStart == 0 || old.StartTime.ToFileTimeUtc() == afterStart)
+                    {
+                        if (!old.WaitForExit(TimeSpan.FromMinutes(1)))
+                        {
+                            Log.Warn("Render restart: the old copy is still open; waiting until it ends");
+                            old.WaitForExit();
+                        }
+                    }
+                }
                 catch (ArgumentException) { } // already gone
                 catch (Exception ex) { Log.Warn($"Waiting for the old copy: {ex.Message}"); }
             }
@@ -485,8 +503,14 @@ public partial class App : Application
 
     private void RestartAfterRenderFailure()
     {
+        if (Volatile.Read(ref _replacementStarted) == 1) return; // already handled
         // Start the new copy first: shutting down with a dead render thread can crash before the end.
-        if (!StartReplacement()) return;
+        if (!StartReplacement())
+        {
+            // No new copy: keep this one. It still keeps the PC awake; only its windows are empty.
+            try { _tray?.Toast("Vigil can't draw its windows", "Quit Vigil from the tray icon, then open it again."); } catch { }
+            return;
+        }
         Quitting = true;
         // Backstop: if quitting hangs on the dead render thread, put the power plan back and end by force,
         // so the new copy (waiting for this process) can take over.
@@ -500,7 +524,7 @@ public partial class App : Application
         Shutdown();
     }
 
-    /// <summary>Starts the copy that replaces this one, once. False if it was already started.</summary>
+    /// <summary>Starts the copy that replaces this one, once. True only if a new process really started.</summary>
     private bool StartReplacement()
     {
         if (Interlocked.Exchange(ref _replacementStarted, 1) == 1) return false;
@@ -511,12 +535,18 @@ public partial class App : Application
         Log.Warn($"Drawing failed (UCEERR_RENDERTHREADFAILURE); restarting Vigil (restart {count})");
         try
         {
-            if (ReplacementStartInfo($"--render-restart {count} --after {Environment.ProcessId}") is { } psi)
-                System.Diagnostics.Process.Start(psi);
-            else Log.Warn("Render restart: can't find Vigil's own program file");
+            using var me = System.Diagnostics.Process.GetCurrentProcess();
+            // --background: come back quietly, without opening the tray card.
+            var args = $"--background --render-restart {count} --after {me.Id}:{me.StartTime.ToFileTimeUtc()}";
+            if (ReplacementStartInfo(args) is { } psi)
+            {
+                using var started = System.Diagnostics.Process.Start(psi);
+                if (started is not null) return true;
+            }
+            Log.Warn("Render restart: couldn't start a new copy of Vigil");
         }
         catch (Exception ex) { Log.Error("Restart after render failure", ex); }
-        return true;
+        return false;
     }
 
     private static System.Diagnostics.ProcessStartInfo? ReplacementStartInfo(string args)
