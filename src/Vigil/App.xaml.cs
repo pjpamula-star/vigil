@@ -39,6 +39,10 @@ public partial class App : Application
     {
         base.OnStartup(e);
         var args = e.Args.Select(a => a.ToLowerInvariant()).ToHashSet();
+        var rr = Array.FindIndex(e.Args, a => a.Equals("--render-restart", StringComparison.OrdinalIgnoreCase));
+        if (rr >= 0 && rr + 1 < e.Args.Length && int.TryParse(e.Args[rr + 1], out var n)) _renderRestarts = n;
+        // The GPU path failed again and again after restarts: draw in software from now on.
+        if (_renderRestarts >= 3) System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
 
         // Integration tests only: "--data-dir <dir> --port <n>" runs an isolated second copy that
         // never touches the real power plan, settings, or single-instance lock.
@@ -85,6 +89,13 @@ public partial class App : Application
         {
             _instance = new Mutex(true, InstanceName, out var isFirst);
             if (!isFirst)
+            // After a render-failure restart the old copy may still be closing: wait for it.
+            for (var tries = 0; !isFirst && _renderRestarts > 0 && tries < 40; tries++)
+            {
+                _instance.Dispose();
+                Thread.Sleep(250);
+                _instance = new Mutex(true, InstanceName, out isFirst);
+            }
             {
                 // Already running: ask it to show itself (or the iPhone pairing window).
                 try { EventWaitHandle.OpenExisting(args.Contains("--pair") ? PairSignalName : ShowSignalName).Set(); } catch { }
@@ -116,9 +127,10 @@ public partial class App : Application
 
             DispatcherUnhandledException += (_, ex) =>
             {
-                Log.Error("Unhandled UI exception", ex.Exception);
                 ex.Handled = true;
             };
+                if (IsRenderThreadFailure(ex.Exception)) { RestartAfterRenderFailure(); return; }
+                Log.Error("Unhandled UI exception", ex.Exception);
             AppDomain.CurrentDomain.UnhandledException += (_, ex) =>
             {
                 Log.Error("Fatal exception", ex.ExceptionObject as Exception);
@@ -441,6 +453,41 @@ public partial class App : Application
     /// <summary>
     /// The eye's moves side by side (rest, half shut, shut, glancing four ways), big and as real tray
     /// icons at 16, 24 and 32 px on a dark and a light taskbar, for checking how they read.
+        if (_restartPending && Environment.ProcessPath is { } exe)
+        {
+            // Count only failures that come soon after the last restart, so one bad wake a day
+            // never adds up to software drawing.
+            var count = DateTime.UtcNow - _startedAt < TimeSpan.FromMinutes(2) ? _renderRestarts + 1 : 1;
+            try { System.Diagnostics.Process.Start(exe, $"--render-restart {count}"); }
+            catch (Exception ex) { Log.Error("Restart after render failure", ex); }
+        }
+    }
+
+    // ---------- render failure recovery ----------
+
+    // When the PC wakes, the graphics driver can reset under WPF. WPF's render thread then dies
+    // (UCEERR_RENDERTHREADFAILURE) and never comes back: every window opens empty. The only
+    // cure is a new process, so Vigil restarts itself.
+    private int _renderRestarts;
+    private readonly DateTime _startedAt = DateTime.UtcNow;
+    private bool _restartPending;
+
+    internal static bool IsRenderThreadFailure(Exception? ex)
+    {
+        for (; ex is not null; ex = ex.InnerException)
+            if (ex is System.Runtime.InteropServices.COMException { HResult: unchecked((int)0x88980406) }
+                || ex.Message.Contains("UCEERR_RENDERTHREADFAILURE", StringComparison.Ordinal))
+                return true;
+        return false;
+    }
+
+    private void RestartAfterRenderFailure()
+    {
+        if (_restartPending) return;
+        _restartPending = true;
+        Log.Warn($"Drawing failed after wake (UCEERR_RENDERTHREADFAILURE); restarting Vigil (restart {_renderRestarts + 1})");
+        Quitting = true;
+        Shutdown();
     /// </summary>
     private static void EyeSheet(string path)
     {
