@@ -308,7 +308,7 @@ public sealed class SessionTracker
         {
             foreach (var s in _sessions.Values)
             {
-                if (live is not null && Reconcile(s, live.GetValueOrDefault(s.Id), now))
+                if (live is not null && Reconcile(s, live.GetValueOrDefault(s.Id), live.Count > 0, now))
                 {
                     changed.Add(s);
                     continue;
@@ -336,8 +336,26 @@ public sealed class SessionTracker
     private static bool ClaudeSaysBusy(Session s, LiveClaude? reg, DateTime now) =>
         reg is { Alive: true, Status: "busy" } && now - s.LastEventAt < BusyTrust;
 
+    /// <summary>How long a session must be missing from Claude's list, with no hook, before it counts as closed.</summary>
+    public static readonly TimeSpan MissingSettle = TimeSpan.FromMinutes(10);
+
+    private void EndClosed(Session s, DateTime now)
+    {
+        if (s.CurrentTurn is { EndedAt: null } open)
+        {
+            open.EndedAt = now;
+            open.EndNote = "Closed before it finished";
+        }
+        s.NowLine = null;
+        s.Reason = null;
+        s.ActiveSubagents = 0;
+        SetState(s, SessionState.Ended, now);
+        AddEntry(s, new TimelineEntry { At = now, Kind = EntryKind.Done, Text = "Claude was closed" });
+        Log.Info($"Session {s.Id[..Math.Min(8, s.Id.Length)]}: Claude's window was closed");
+    }
+
     /// <summary>True if the session changed.</summary>
-    private bool Reconcile(Session s, LiveClaude? reg, DateTime now)
+    private bool Reconcile(Session s, LiveClaude? reg, bool listInUse, DateTime now)
     {
         // Vigil called it quiet (no news for a while, or it restarted mid-run), but Claude says it's busy:
         // one long command, say. It's working.
@@ -352,6 +370,14 @@ public sealed class SessionTracker
         {
             _goneSince.Remove(s.Id);
             return false;
+        }
+
+        if (reg is null && listInUse && now - s.LastEventAt >= MissingSettle)
+        {
+            // Claude lists every open window, and this one has been missing (and silent) for a while: it was
+            // closed while Vigil wasn't watching, e.g. Vigil restarted and its file was tidied away meanwhile.
+            EndClosed(s, now);
+            return true;
         }
 
         if (reg is null)
@@ -374,17 +400,7 @@ public sealed class SessionTracker
             _goneSince[s.Id] = since;
             if (now - since < GoneSettle) return false;
             _goneSince.Remove(s.Id);
-            if (s.CurrentTurn is { EndedAt: null } open)
-            {
-                open.EndedAt = now;
-                open.EndNote = "Closed before it finished";
-            }
-            s.NowLine = null;
-            s.Reason = null;
-            s.ActiveSubagents = 0;
-            SetState(s, SessionState.Ended, now);
-            AddEntry(s, new TimelineEntry { At = now, Kind = EntryKind.Done, Text = "Claude was closed" });
-            Log.Info($"Session {s.Id[..Math.Min(8, s.Id.Length)]}: Claude's window was closed");
+            EndClosed(s, now);
             return true;
         }
         _goneSince.Remove(s.Id);

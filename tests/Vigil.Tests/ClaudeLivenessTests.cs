@@ -133,6 +133,26 @@ public class ClaudeLivenessTests : TempRoot
     }
 
     [Fact]
+    public void A_question_whose_window_vanished_while_Vigil_was_away_ends()
+    {
+        StartWorking();
+        _t.Handle(Hook.Event("Notification", extra: new { notification_type = "permission_prompt", message = "Claude needs your permission" }));
+        var others = new Dictionary<string, LiveClaude> { ["other"] = new LiveClaude("other", "idle", _clock.Now, true) };
+
+        _clock.Advance(TimeSpan.FromMinutes(5));
+        _t.Tick(others);
+        Assert.Equal(SessionState.NeedsYou, S.State); // too soon to tell
+
+        _t.Tick(new Dictionary<string, LiveClaude>()); // an empty list says nothing (older Claude Code)
+        _clock.Advance(TimeSpan.FromMinutes(10));
+        _t.Tick(new Dictionary<string, LiveClaude>());
+        Assert.Equal(SessionState.NeedsYou, S.State);
+
+        _t.Tick(others);
+        Assert.Equal(SessionState.Ended, S.State);
+    }
+
+    [Fact]
     public void Any_hook_brings_a_session_back_even_if_Vigil_thought_it_was_closed()
     {
         StartWorking();
