@@ -27,9 +27,9 @@ public class GlanceTests
     }
 
     [Fact]
-    public void Old_finished_work_drops_off_but_waiting_never_does()
+    public void Old_finished_work_drops_off_and_waiting_lasts_a_day()
     {
-        var g = Glance.Of(new[] { S("old", SessionState.Done, 13), S("waiting", SessionState.NeedsYou, 20) }, Now);
+        var g = Glance.Of(new[] { S("old", SessionState.Done, 13), S("waiting", SessionState.NeedsYou, 20), S("stale", SessionState.NeedsYou, 25) }, Now);
         Assert.Empty(g.Done);
         Assert.Equal(new[] { "waiting" }, g.NeedsYou.Select(s => s.Id));
     }

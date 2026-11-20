@@ -9,6 +9,9 @@ public sealed record Glance(IReadOnlyList<Session> NeedsYou, IReadOnlyList<Sessi
     /// <summary>A finished session stays on the pill this long (if you leave it open), then it's old news.</summary>
     public static readonly TimeSpan DoneFor = TimeSpan.FromHours(12);
 
+    /// <summary>A question waits longer, but not forever: past a day it's left to What happened.</summary>
+    public static readonly TimeSpan WaitingFor = TimeSpan.FromHours(24);
+
     public bool Empty => NeedsYou.Count == 0 && Working.Count == 0 && Done.Count == 0;
 
     /// <summary>Everything on the pill, in the order you'd act on it.</summary>
@@ -17,7 +20,8 @@ public sealed record Glance(IReadOnlyList<Session> NeedsYou, IReadOnlyList<Sessi
     public static Glance Of(IEnumerable<Session> sessions, DateTime now)
     {
         var recent = sessions.Where(s => s.Background != true)
-            .Where(s => now - s.LastEventAt < DoneFor || s.State is SessionState.Working or SessionState.NeedsYou)
+            .Where(s => now - s.LastEventAt < DoneFor || s.State is SessionState.Working
+                || (s.State is SessionState.NeedsYou && now - s.LastEventAt < WaitingFor))
             .OrderByDescending(s => s.LastEventAt).ToList();
         return new Glance(
             // Stopped, out of usage, or gone silent: all of them want a look from you.
